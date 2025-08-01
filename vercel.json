@@ -5,19 +5,5 @@
       "src": "apostila.server.js",
       "use": "@vercel/node"
     }
-  ],
-  "routes": [
-    {
-      "src": "/(create-payment-apostila|check-status|webhook-mp-apostila|save-whatsapp)",
-      "dest": "apostila.server.js"
-    },
-    {
-      "src": "/(.*\\.(?:css|ico|png|jpg|jpeg|gif|svg|pdf))",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "apostila.server.js"
-    }
   ]
 }

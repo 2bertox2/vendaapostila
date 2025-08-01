@@ -1,50 +1,22 @@
-require('dotenv').config(); // Carrega as variáveis de ambiente do arquivo .env
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const fs = require('fs'); // Usado apenas para checar se o PDF existe
+const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 
-//...
+// --- INICIALIZAÇÃO DO APP ---
 const app = express();
 
-// 1. Servir arquivos estáticos (CSS, imagens, etc.) da pasta raiz PRIMEIRO
-app.use(express.static(path.join(__dirname, '')));
-
-// 2. Configurações de body-parser e CORS
-app.use(cors());
-app.use(express.json());
-
-
-// --- ROTAS DA API COM SUPABASE ---
-// (As suas rotas como /create-payment-apostila, /check-status, etc. vêm aqui)
-app.post('/create-payment-apostila', async (req, res) => {
-  //... seu código da rota
-});
-
-// ...outras rotas da API...
-
-
-// 3. Rota "catch-all" no FINAL para servir o app principal
-// Esta rota só será acionada se nenhuma rota da API acima corresponder.
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'apostila.html'));
-});
-
-// Rota principal para servir o arquivo HTML
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'apostila.html'));
-});
-
-// --- ARQUIVOS E PREÇO ---
+// --- CONSTANTES E CONFIGURAÇÕES ---
 const APOSTILA_FILE_PATH = path.join(__dirname, 'apostila.pdf');
 const APOSTILA_PRICE = 19.90;
 
-// --- CONFIGURAÇÕES DE SERVIÇOS (USAR VARIÁVEIS DE AMBIENTE EM PRODUÇÃO) ---
+// Carrega as variáveis de ambiente
 const MERCADO_PAGO_TOKEN = process.env.MERCADO_PAGO_TOKEN;
-const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3001'; // Fallback para dev local
+const PUBLIC_URL = process.env.PUBLIC_URL;
 const EMAIL_CONFIG = {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
@@ -52,7 +24,7 @@ const EMAIL_CONFIG = {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// --- INICIALIZAÇÃO DOS CLIENTES ---
+// Inicializa os clientes dos serviços
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -61,14 +33,23 @@ const transporter = nodemailer.createTransport({
     auth: { user: EMAIL_CONFIG.user, pass: EMAIL_CONFIG.pass },
 });
 
-// --- FUNÇÃO DE ENVIO DE E-MAIL COM APOSTILA ---
-async function sendApostilaEmail(sale) {
-    try {
-        if (!fs.existsSync(APOSTILA_FILE_PATH)) {
-            console.error("ERRO CRÍTICO: Arquivo da apostila (apostila.pdf) não encontrado no servidor.");
-            return;
-        }
+// --- MIDDLEWARE (Executado em todos os pedidos, na ordem) ---
 
+// 1. Middleware Essencial: Habilita CORS e o parser de JSON
+app.use(cors());
+app.use(express.json());
+
+// 2. Servir Ficheiros Estáticos: Procura por imagens, etc., na pasta raiz
+app.use(express.static(path.join(__dirname, '')));
+
+
+// --- FUNÇÃO DE ENVIO DE E-MAIL ---
+async function sendApostilaEmail(sale) {
+    if (!fs.existsSync(APOSTILA_FILE_PATH)) {
+        console.error("ERRO CRÍTICO: Ficheiro da apostila (apostila.pdf) não encontrado no servidor.");
+        return;
+    }
+    try {
         await transporter.sendMail({
             from: `"Projeto NST TREINAMENTO" <${EMAIL_CONFIG.user}>`,
             to: sale.email,
@@ -81,12 +62,6 @@ async function sendApostilaEmail(sale) {
                     <br>
                     <p>Atenciosamente,</p>
                     <p>Equipe NST TREINAMENTO</p>
-                    <hr>
-                    <p style="font-size: 0.8em; color: #888;">
-                        Caso tenha problemas para abrir o arquivo ou não o tenha recebido corretamente, por favor, entre em contato respondendo a este e-mail ou enviando uma mensagem para: <a href="mailto:nilsonsantosterapeuta@gmail.com">nilsonsantosterapeuta@gmail.com</a>
-                        <br>
-                        <em>Este é um e-mail automático, por favor, não responda diretamente.</em>
-                    </p>
                 </div>
             `,
             attachments: [{
@@ -101,16 +76,14 @@ async function sendApostilaEmail(sale) {
     }
 }
 
-// --- ROTAS DA API COM SUPABASE ---
+
+// --- ROTAS DA API (Handlers específicos para a funcionalidade do site) ---
 
 app.post('/create-payment-apostila', async (req, res) => {
-    if (!MERCADO_PAGO_TOKEN || !PUBLIC_URL || !SUPABASE_URL || !SUPABASE_KEY) {
+    if (!MERCADO_PAGO_TOKEN || !PUBLIC_URL) {
         return res.status(500).json({ error: "O servidor não está configurado corretamente." });
     }
     const { fullName, email, cpf } = req.body;
-    if (!fullName || !email || !cpf) {
-        return res.status(400).json({ error: "Dados incompletos." });
-    }
     const nameParts = fullName.trim().split(' ');
     const firstName = nameParts.shift();
     const lastName = nameParts.join(' ');
@@ -118,23 +91,24 @@ app.post('/create-payment-apostila', async (req, res) => {
 
     const newSale = {
         id: `apostila_${Date.now()}`,
-        name: fullName, email, cpf: cleanedCpf,
+        name: fullName,
+        email: email,
+        cpf: cleanedCpf,
         product: 'Apostila Digital - Módulo I'
     };
-    
-    const { error: insertError } = await supabase.from('vendas_apostila').insert([newSale]);
 
+    const { error: insertError } = await supabase.from('vendas_apostila').insert([newSale]);
     if (insertError) {
         console.error("Erro ao inserir no Supabase:", insertError);
         return res.status(500).json({ error: "Falha ao registrar a venda." });
     }
-    
+
     const paymentData = {
         transaction_amount: APOSTILA_PRICE,
         description: 'Apostila Digital - Módulo I: Luto Mal Resolvido',
         payment_method_id: 'pix',
-        payer: { email: email, first_name: firstName, last_name: lastName, identification: { type: 'CPF', number: cleanedCpf }},
-        notification_url: `${PUBLIC_URL}/webhook-mp-apostila`, 
+        payer: { email, first_name: firstName, last_name: lastName, identification: { type: 'CPF', number: cleanedCpf } },
+        notification_url: `${PUBLIC_URL}/webhook-mp-apostila`,
         external_reference: newSale.id,
     };
 
@@ -142,9 +116,7 @@ app.post('/create-payment-apostila', async (req, res) => {
         const response = await axios.post('https://api.mercadopago.com/v1/payments', paymentData, {
             headers: { 'Authorization': `Bearer ${MERCADO_PAGO_TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': newSale.id }
         });
-        
         await supabase.from('vendas_apostila').update({ payment_id: response.data.id }).eq('id', newSale.id);
-
         const qrData = response.data.point_of_interaction.transaction_data;
         res.json({ saleId: newSale.id, qrCodeText: qrData.qr_code, qrCodeBase64: qrData.qr_code_base64 });
     } catch (error) {
@@ -156,7 +128,6 @@ app.post('/create-payment-apostila', async (req, res) => {
 app.get('/check-status', async (req, res) => {
     const { saleId } = req.query;
     const { data, error } = await supabase.from('vendas_apostila').select('status').eq('id', saleId).single();
-
     if (error || !data) return res.status(404).json({ error: 'Venda não encontrada.' });
     res.json({ status: data.status });
 });
@@ -169,23 +140,13 @@ app.post('/webhook-mp-apostila', async (req, res) => {
                 headers: { 'Authorization': `Bearer ${MERCADO_PAGO_TOKEN}` }
             });
             const { status, external_reference } = paymentDetails.data;
-
             if (status === 'approved' && external_reference) {
                 const { data: saleData } = await supabase.from('vendas_apostila').select('status').eq('id', external_reference).single();
-                
                 if (saleData && saleData.status !== 'paid') {
-                    const { data: updatedSale, error } = await supabase
-                        .from('vendas_apostila')
-                        .update({ status: 'paid' })
-                        .eq('id', external_reference)
-                        .select()
-                        .single();
-
+                    const { data: updatedSale, error } = await supabase.from('vendas_apostila').update({ status: 'paid' }).eq('id', external_reference).select().single();
                     if (updatedSale && !error) {
-                        console.log(`✅ [Webhook] Venda ${external_reference} atualizada para 'pago' no Supabase!`);
-                        if (EMAIL_CONFIG.user && EMAIL_CONFIG.pass) {
-                            await sendApostilaEmail(updatedSale);
-                        }
+                        console.log(`✅ [Webhook] Venda ${external_reference} atualizada para 'pago'!`);
+                        await sendApostilaEmail(updatedSale);
                     }
                 }
             }
@@ -196,29 +157,26 @@ app.post('/webhook-mp-apostila', async (req, res) => {
 
 app.post('/save-whatsapp', async (req, res) => {
     const { saleId, whatsapp } = req.body;
-    if (!saleId || !whatsapp) {
-        return res.status(400).json({ error: 'Dados incompletos.' });
-    }
-
+    if (!saleId || !whatsapp) return res.status(400).json({ error: 'Dados incompletos.' });
     const { error } = await supabase.from('vendas_apostila').update({ whatsapp: whatsapp }).eq('id', saleId);
-
     if (error) {
-        console.error("Erro ao salvar WhatsApp no Supabase:", error);
+        console.error("Erro ao salvar WhatsApp:", error);
         return res.status(500).json({ success: false, message: "Não foi possível salvar o número." });
     }
-
     console.log(`📱 WhatsApp salvo para a venda ${saleId}`);
     res.json({ success: true, message: "Número salvo com sucesso!" });
 });
 
 
+// --- ROTA PRINCIPAL DO HTML (deve ser a última) ---
+// Se um pedido não corresponder a um ficheiro estático ou a uma rota da API, ele cairá aqui.
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'apostila.html'));
+});
+
+
+// --- INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`Servidor da Apostila (com Supabase) rodando na porta ${PORT}`);
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        console.warn("\n⚠️  ATENÇÃO: Variáveis de ambiente do Supabase não encontradas. O servidor não funcionará corretamente.\n");
-    }
-     if (!fs.existsSync(APOSTILA_FILE_PATH)) {
-        console.warn("\n⚠️  ATENÇÃO: O arquivo 'apostila.pdf' não foi encontrado. O envio de e-mail falhará.\n");
-    }
+    console.log(`Servidor rodando na porta ${PORT}`);
 });

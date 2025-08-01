@@ -12,7 +12,7 @@ const app = express();
 
 // --- CONSTANTES E CONFIGURAÇÕES ---
 const APOSTILA_FILE_PATH = path.join(__dirname, 'apostila.pdf');
-const APOSTILA_PRICE = 19.90;
+const APOSTILA_PRICE = 0.10;
 
 // Carrega as variáveis de ambiente
 const MERCADO_PAGO_TOKEN = process.env.MERCADO_PAGO_TOKEN;

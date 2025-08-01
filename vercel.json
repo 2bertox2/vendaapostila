@@ -5,5 +5,11 @@
       "src": "apostila.server.js",
       "use": "@vercel/node"
     }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "apostila.server.js"
+    }
   ]
 }

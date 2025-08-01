@@ -8,6 +8,14 @@
   ],
   "routes": [
     {
+      "src": "/(create-payment-apostila|check-status|webhook-mp-apostila|save-whatsapp)",
+      "dest": "apostila.server.js"
+    },
+    {
+      "src": "/(.*).(js|css|ico|png|jpg|jpeg|gif|svg|pdf)",
+      "dest": "/$1.$2"
+    },
+    {
       "src": "/(.*)",
       "dest": "apostila.server.js"
     }

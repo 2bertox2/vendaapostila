@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venda da Apostila - A Percepção do Analista</title>
+    <link rel="stylesheet" href="apostila.style.css">
+</head>
+<body>
+    <div class="page-header"><img src="logo nilson.png" alt="Logo Nilson Santos Terapeuta" class="logo"></div>
+    
+    <div class="form-container" id="main-container">
+        <div id="form-wrapper">
+            <header>
+                <h1>APOSTILA - MÓDULO I</h1>
+                <p>Adquira o material de apoio completo em PDF do módulo "Luto Mal Resolvido".</p>
+            </header>
+            <form id="purchase-form">
+                <div class="info-box">
+                    <p><strong>Atenção:</strong> A apostila é um arquivo digital em formato PDF e será enviada para o seu e-mail após a confirmação do pagamento.</p>
+                </div>
+                <div class="product-display">
+                    <h2>Apostila Digital: Luto Mal Resolvido</h2>
+                    <p class="price">R$ 19,00</p>
+                </div>
+                <div class="form-group"><label for="fullName">Nome Completo *</label><input type="text" id="fullName" name="fullName" placeholder="Digite seu nome completo" required></div>
+                <div class="form-group"><label for="email">E-mail para Recebimento *</label><input type="email" id="email" name="email" placeholder="seu_email@email.com" required></div>
+                <div class="form-group"><label for="cpf">CPF (para o pagamento) *</label><input type="text" id="cpf" name="cpf" placeholder="000.000.000-00" maxlength="14" required></div>
+                
+                <button type="submit" class="submit-btn" id="submit-button">COMPRAR APOSTILA E PAGAR</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="pix-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div id="pix-payment-info">
+                <h2>Pague com PIX para Finalizar</h2>
+                <p>Escaneie o QR Code abaixo com o app do seu banco:</p>
+                <img id="pix-qrcode-image" src="" alt="QR Code PIX" class="qr-code-img">
+                <p>Ou use o PIX Copia e Cola:</p>
+                <textarea id="pix-copy-paste" rows="3" readonly></textarea>
+                <button id="copy-button">Copiar Código</button>
+                <p class="waiting-payment">Aguardando confirmação do pagamento...</p>
+            </div>
+            <div id="pix-success-message" style="display: none;">
+                <img src="logo nilson2.png" alt="Logo" class="success-logo">
+                <h2>Pagamento Aprovado!</h2>
+                <p>Enviamos a apostila para o seu e-mail: <strong id="user-email-confirm"></strong></p>
+                <div class="confirmation-details">
+                    <p><strong>Produto:</strong> Apostila Digital - Módulo I</p>
+                    <p class="reminder"><strong>IMPORTANTE:</strong> Verifique sua caixa de spam ou lixo eletrônico.</p>
+                </div>
+                
+                <div id="whatsapp-form-container" class="help-section">
+                    <p>Para sua segurança, caso não encontre o e-mail, você pode deixar seu WhatsApp abaixo para que nossa equipe possa te ajudar.</p>
+                    <form id="whatsapp-form">
+                        <input type="tel" id="whatsapp-input" placeholder="(00) 00000-0000" maxlength="15">
+                        <button type="submit" id="save-whatsapp-btn">Salvar WhatsApp</button>
+                    </form>
+                </div>
+                
+                <div class="help-section">
+                    <p>Se preferir, pode também nos contatar pelo e-mail:<br><a href="mailto:nilsonsantosterapeuta@gmail.com"><strong>nilsonsantosterapeuta@gmail.com</strong></a></p>
+                </div>
+                
+                <button id="close-modal-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('purchase-form');
+        const submitButton = document.getElementById('submit-button');
+        const modal = document.getElementById('pix-modal');
+        const qrCodeImage = document.getElementById('pix-qrcode-image');
+        const pixCopyPaste = document.getElementById('pix-copy-paste');
+        const copyButton = document.getElementById('copy-button');
+        const pixPaymentInfo = document.getElementById('pix-payment-info');
+        const pixSuccessMessage = document.getElementById('pix-success-message');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const userEmailConfirm = document.getElementById('user-email-confirm');
+        const whatsappForm = document.getElementById('whatsapp-form');
+        const whatsappInput = document.getElementById('whatsapp-input');
+        const saveWhatsappBtn = document.getElementById('save-whatsapp-btn');
+
+        let pollingInterval;
+        let formDataForSuccess = {};
+        let currentSaleId = null;
+
+        function startPolling(saleId) {
+            currentSaleId = saleId; 
+            pollingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/check-status?saleId=${saleId}`);
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    if (data.status === 'paid') {
+                        clearInterval(pollingInterval);
+                        userEmailConfirm.textContent = formDataForSuccess.email;
+                        pixPaymentInfo.style.display = 'none';
+                        pixSuccessMessage.style.display = 'block';
+                    }
+                } catch (error) { 
+                    clearInterval(pollingInterval); 
+                }
+            }, 5000);
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); 
+            submitButton.disabled = true;
+            submitButton.textContent = 'Gerando PIX...';
+            pixPaymentInfo.style.display = 'block';
+            pixSuccessMessage.style.display = 'none';
+            const formData = new FormData(form);
+            formDataForSuccess = { email: formData.get('email') };
+            const data = { 
+                fullName: formData.get('fullName'), 
+                email: formData.get('email'), 
+                cpf: formData.get('cpf')
+            };
+            try {
+                const response = await fetch('/create-payment-apostila', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (!response.ok) throw new Error('Falha ao gerar o PIX.');
+                const paymentData = await response.json();
+                qrCodeImage.src = `data:image/png;base64,${paymentData.qrCodeBase64}`;
+                pixCopyPaste.value = paymentData.qrCodeText;
+                modal.style.display = 'flex';
+                startPolling(paymentData.saleId);
+            } catch (error) {
+                alert(error.message);
+                submitButton.disabled = false;
+                submitButton.textContent = 'COMPRAR APOSTILA E PAGAR';
+            }
+        });
+
+        whatsappForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const whatsappNumber = whatsappInput.value;
+            if (!whatsappNumber || !currentSaleId) return;
+            
+            saveWhatsappBtn.disabled = true;
+            saveWhatsappBtn.textContent = 'Salvando...';
+
+            try {
+                const response = await fetch('/save-whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ saleId: currentSaleId, whatsapp: whatsappNumber })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    saveWhatsappBtn.textContent = 'Salvo!';
+                } else {
+                    saveWhatsappBtn.textContent = 'Erro!';
+                }
+            } catch (error) {
+                saveWhatsappBtn.textContent = 'Erro!';
+            }
+        });
+
+        const cpfInput = document.getElementById('cpf');
+        cpfInput.addEventListener('input', (e) => { let v=e.target.value.replace(/\D/g,''); v=v.replace(/(\d{3})(\d)/,'$1.$2'); v=v.replace(/(\d{3})(\d)/,'$1.$2'); v=v.replace(/(\d{3})(\d{1,2})$/,'$1-$2'); e.target.value=v; });
+
+        whatsappInput.addEventListener('input', (e) => { 
+            let v=e.target.value.replace(/\D/g,''); 
+            v=v.replace(/^(\d{2})(\d)/,'($1) $2'); 
+            v=v.replace(/(\d{5})(\d)/,'$1-$2'); 
+            e.target.value=v; 
+        });
+
+        copyButton.addEventListener('click', () => { pixCopyPaste.select(); document.execCommand('copy'); copyButton.textContent = 'Copiado!'; setTimeout(() => { copyButton.textContent = 'Copiar Código'; }, 2000); });
+        
+        closeModalBtn.addEventListener('click', () => { 
+            modal.style.display = 'none'; 
+            clearInterval(pollingInterval); 
+            // Reseta o formulário principal ao fechar o modal
+            form.reset();
+            submitButton.disabled = false;
+            submitButton.textContent = 'COMPRAR APOSTILA E PAGAR';
+        });
+    </script>
+</body>
+</html>
